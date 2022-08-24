@@ -27,18 +27,18 @@ namespace RPU{
 /* OneSidedTransferRPUDeviceMetaParameter*/
 template <typename T>
 OneSidedTransferRPUDeviceMetaParameter<T>::OneSidedTransferRPUDeviceMetaParameter(
-    const OneSidedRPUDeviceMetaParameterBase<T> &dp_fast,
-    const OneSidedRPUDeviceMetaParameterBase<T> &dp_rest,
+     const PulsedRPUDeviceMetaParameterBase<T> &dp_fast,
+    const PulsedRPUDeviceMetaParameterBase<T> &dp_rest,
     int n_total_devices) {
   this->vec_par.clear();
   if (n_total_devices < 2) {
     RPU_FATAL("More or equal than 2 devices expected.");
   }
-  this->appendVecPar(dp_fast);// g+ side parameter
-  this->appendVecPar(dp_fast);// g- side parameter
+  this->appendVecPar(dp_fast);// OT : g+ side parameter
+  this->appendVecPar(dp_fast);// OT : g- side parameter
   for (int i = 1; i < n_total_devices; i++) {
-    this->appendVecPar(dp_rest);//G+ side parameter
-    this->appendVecPar(dp_rest);//G- side parameter
+    this->appendVecPar(dp_rest);//OT : G+ side parameter
+    this->appendVecPar(dp_rest);//OT : G- side parameter
   }
 };
 
@@ -132,7 +132,6 @@ void OneSidedTransferRPUDeviceMetaParameter<T>::initializeWithSize(int x_size, i
   size_t n_devices = this->vec_par.size();
 
   if (n_devices < 2) {
-    // makes no sense
     RPU_FATAL("Need at least 2 devices");
   }
 
@@ -144,7 +143,7 @@ void OneSidedTransferRPUDeviceMetaParameter<T>::initializeWithSize(int x_size, i
     _out_size = x_size;
   }
 
-  this->update_policy = VectorDeviceUpdatePolicy::SingleFixed;
+  this->update_policy = VectorDeviceUpdatePolicy::SingleFixed;// TO DO: check how update_policy affect in update cycle
   this->first_update_idx = 0; // only first is updated
   this->same_context = true;
 
@@ -175,7 +174,7 @@ void OneSidedTransferRPUDeviceMetaParameter<T>::initializeWithSize(int x_size, i
   if (this->gamma_vec.size() == 0) {
     this->gamma_vec.resize(n_devices);
     for (size_t i = 0; i < n_devices; i++) {
-      this->gamma_vec[n_devices - i - 1] = pow(gamma, (T)i);
+        this->gamma_vec[n_devices - i - 1] = pow(-1,i%2)*pow(gamma, (T)i/(T)2);//OT : considered G+ G-
     }
   }
 
@@ -193,16 +192,17 @@ void OneSidedTransferRPUDeviceMetaParameter<T>::initializeWithSize(int x_size, i
     RPU_WARNING("too many transfers in one shot. Using full transfer instead.");
   }
 
-  // TODO: make an default value, where the value of the transfer depends on  x_size
+  // IBM TODO: make an default value, where the value of the transfer depends on  x_size
 
   if (transfer_every_vec.size() == 0) {
     T n = transfer_every;
-    for (size_t i = 0; i < n_devices; i++) {
+    for (size_t i = 0; i < n_devices; i=i+2) { // OT : 2 devices are one set.
       transfer_every_vec.push_back(n);
       n *= (T)_in_size / n_reads_per_transfer;
     }
     if (no_self_transfer) {
       transfer_every_vec[n_devices - 1] = 0;
+      transfer_every_vec[n_devices - 2] = 0;
     }
   }
 
@@ -273,8 +273,7 @@ OneSidedTransferRPUDevice<T>::OneSidedTransferRPUDevice(const OneSidedTransferRP
   g_minus_ = other.g_minus_;
   a_indices_ = other.a_indices_;
   b_indices_ = other.b_indices_;
-  c_indices_ = other.c_indices_;
-  d_indices_ = other.d_indices_;
+ 
 
   refresh_fb_pass_ = make_unique<ForwardBackwardPassIOManaged<T>>(*other.refresh_fb_pass_);
   refresh_pwu_ = make_unique<PulsedRPUWeightUpdater<T>>(*other.refresh_pwu_);
@@ -323,8 +322,7 @@ OneSidedTransferRPUDevice<T> &OneSidedTransferRPUDevice<T>::operator=(OneSidedTr
   g_minus_ = other.g_minus_;
   a_indices_ = std::move(other.a_indices_);
   b_indices_ = std::move(other.b_indices_);
-  c_indices_ = std::move(other.c_indices_);
-  d_indices_ = std::move(other.d_indices_);
+
 
   refresh_fb_pass_ = std::move(other.refresh_fb_pass_);
   refresh_pwu_ = std::move(other.refresh_pwu_);
@@ -383,7 +381,7 @@ template <typename T> int OneSidedTransferRPUDevice<T>::resetCounters(bool force
   refresh_counter_ = 0;
  
  //transfer part
-  current_slice_indices_.resize(this->n_devices_);
+  current_slice_indices_.resize(this->n_devices_/2); // OT : current slice size is half because 2 devices are one set.
   std::fill(current_slice_indices_.begin(), current_slice_indices_.end(), (int)0);
  
   return VectorRPUDevice<T>::resetCounters(force);
@@ -399,8 +397,8 @@ void OneSidedTransferRPUDevice<T>::populate(
   auto &par = getPar();
    par.initializeWithSize(this->x_size_, this->d_size_);
  if (par.copy_inverted) {
-    this->rpu_device_vec_[1]->copyInvertDeviceParameter(&*this->rpu_device_vec_[0]);
-    this->rpu_device_vec_[3]->copyInvertDeviceParameter(&*this->rpu_device_vec_[2]);
+  for(int i=0;i<this->n_devices_/2;i++)
+    this->rpu_device_vec_[i*2+1]->copyInvertDeviceParameter(&*this->rpu_device_vec_[i*2]);
   }
 
  
@@ -451,7 +449,7 @@ void OneSidedTransferRPUDevice<T>::populate(
 
 template <typename T> bool OneSidedTransferRPUDevice<T>::isInverted() const { return g_plus_[0] == 0; }
 
-template <typename T> inline void OneSidedRPUDevice<T>::invert() {
+template <typename T> inline void OneSidedRPUDevice<T>::invert() { //OT TO DO: invert nth device by add parameter 
   std::swap(g_plus_[0], g_minus_[0]);
   this->reduce_weightening_[g_plus_[0]] = 1;
   this->reduce_weightening_[g_minus_[0]] = -1;
@@ -500,7 +498,7 @@ void OneSidedTransferRPUDevice<T>::finishUpdateCycle(
   last_weight_ = fully_hidden_ ? weights : nullptr;
 
   // we transfer the device here to cope with the sparse update below.
-  for (int j = 0; j < this->n_devices_; j++) {
+  for (int j = 0; j < this->n_devices/2_; j++) {
     int every = getTransferEvery(j, m_batch_info);
     if (every > 0 && this->current_update_idx_ % every == 0) {
       // last is self-update (does nothing per default, but could implement refresh in child)
@@ -606,7 +604,7 @@ int OneSidedTransferRPUDevice<T>::getTransferEvery(int from_device_idx, int m_ba
 }
 
 template <typename T>
-void OneSidedTransferRPUDevice<T>::readVector(int device_idx, const T *in_vec, T *out_vec, T alpha) {// TODO: read difference between g+,g-
+void OneSidedTransferRPUDevice<T>::readVector(int device_idx, const T *in_vec, T *out_vec, T alpha) {// OT: read difference between g+,g-
   T **W_plus = getDeviceWeights(g_plus_[device_idx]);
   T **W_minus = getDeviceWeights(g_minus_[device_idx]);
   if (getPar().transfer_columns) {
