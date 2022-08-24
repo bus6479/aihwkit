@@ -1,5 +1,3 @@
-//onesided parameter have to be added
-
 #pragma once
 
 #include "rpu_forward_backward_pass.h"
@@ -56,7 +54,7 @@ inline int getOutSize() const { return _out_size; };
 
 std::string getName() const override {
     std::ostringstream ss;
-    ss << "OneSidedTransfer(" << this->vec_par.size() << ")";
+    ss << "OneSided_Transfer(" << this->vec_par.size() << ")";
     if (this->vec_par.size() > 1) {
       ss << ": " << this->vec_par[0]->getName() << " -> " << this->vec_par[1]->getName();
       ;
@@ -64,26 +62,30 @@ std::string getName() const override {
     return ss.str();
   };
 
-OneSidedTransferRPUDevice<T> *createDevice(int x_size, int d_size, RealWorldRNG<T> *rng) override {
+  OneSidedTransferRPUDevice<T> *createDevice(int x_size, int d_size, RealWorldRNG<T> *rng) override {
     return new OneSidedTransferRPUDevice<T>(x_size, d_size, *this, rng);
   };
 
-OneSidedTransferRPUDeviceMetaParameter<T> *clone() const override {
+  OneSidedTransferRPUDeviceMetaParameter<T> *clone() const override {
     return new OneSidedTransferRPUDeviceMetaParameter<T>(*this);
   };
+  DeviceUpdateType implements() const override { return DeviceUpdateType::Transfer; };
+  void printToStream(std::stringstream &ss) const override;
 
-DeviceUpdateType implements() const override { return DeviceUpdateType::Transfer; };
-void printToStream(std::stringstream &ss) const override;
+  T calcWeightGranularity() const override {
+    T weight_granularity = 0.0;
+    if (this->vec_par.size() > 0) {
+      // only take that from first (fast) device
+      weight_granularity = this->vec_par[0]->calcWeightGranularity();
+    }
+    return weight_granularity;
+  }
+
+  virtual T getTransferLR(int to_device_idx, int from_device_idx, T current_lr) const;
+
+};
 
 
-
-virtual T getTransferLR(int to_device_idx, int from_device_idx, T current_lr) const;
-
-
-
-}
-
-//// start changing
 template <typename T> class OneSidedTransferRPUDevice : public VectorRPUDevice<T> {
 
 public:
@@ -99,8 +101,8 @@ public:
   OneSidedTransferRPUDevice(OneSidedTransferRPUDevice<T> &&);
   OneSidedTransferRPUDevice<T> &operator=(OneSidedTransferRPUDevice<T> &&);
 
-  friend void swap(OneSidedTransferRPUDevice<T> &a, OneSidedTransferRPUDevice<T> &b) noexcept {
-    using std::swap;//TODO : have to modify onesided
+  friend void swap(OneSidedTransferRPUDevice<T> &a, OneSided0TransferRPUDevice<T> &b) noexcept {
+    using std::swap;
     swap(static_cast<VectorRPUDevice<T> &>(a), static_cast<VectorRPUDevice<T> &>(b));
 
     swap(a.transfer_pwu_, b.transfer_pwu_);
@@ -129,9 +131,8 @@ public:
 
   void setDeviceParameter(T **out_weights, const std::vector<T *> &data_ptrs) override;
   void setHiddenUpdateIdx(int idx) override{};
-  void initUpdateCycle(
-      T **weights, const PulsedUpdateMetaParameter<T> &up, T current_lr, int m_batch_info) override;
-  void finishUpdateCycle(//TODO check variables
+
+  void finishUpdateCycle(
       T **weights, const PulsedUpdateMetaParameter<T> &up, T current_lr, int m_batch_info) override;
   T getPulseCountLearningRate(T learning_rate) override;
 
@@ -150,7 +151,7 @@ public:
   virtual void writeVector(
       int device_idx, const T *in_vec, const T *out_vec, const T lr, const int m_batch_info);
   virtual void readVector(int device_idx, const T *in_vec, T *out_vec, T alpha);
-//TODO: add refresh things
+
   void doSparseUpdate(
       T **weights, int i, const int *x_signed_indices, int x_count, int d_sign, RNG<T> *rng)
       override;
@@ -173,7 +174,29 @@ protected:
 
   // no need to swap/copy.
   std::vector<T> transfer_tmp_;
+
+  private:
+  bool isInverted() const;
+  int refreshWeights();
+  void setRefreshVecs();
+
+  int g_plus_ = 1;
+  int g_minus_ = 0;
+  uint64_t refresh_counter_ = 0;
+
+  std::vector<int> a_indices_;
+  std::vector<int> b_indices_;
+
+  // temporary: no need to copy
+  std::vector<T> refresh_p_tmp_;
+  std::vector<T> refresh_m_tmp_;
+  std::vector<T> refresh_p_vec_;
+  std::vector<T> refresh_m_vec_;
+  std::vector<int> coincidences_p_;
+  std::vector<int> coincidences_m_;
 };
+
+
 
 
 }
