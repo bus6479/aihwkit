@@ -30,10 +30,19 @@ bool transfer_columns = true; // or rows
 int _in_size = 0;
 int _out_size = 0;
 
-std::vector<T> transfer_every_vec; // TODO
+std::vector<T> transfer_every_vec; // IBM TODO
 
 IOMetaParamter<T> transfer_io;
 PulsedUpdateMetaParameter<T> transfer_up;
+
+
+int refresh_every = 0; // refresh every x updates (ie counting single vector updates)
+bool units_in_mbatch = true;
+IOMetaParameter<T> refresh_io;           // the IO for reading out during refresh
+PulsedUpdateMetaParameter<T> refresh_up; // UP parameters for refresh
+T refresh_upper_thres = 0.75;
+T refresh_lower_thres = 0.25;
+bool copy_inverted = false; // whether to use copy inverted for second device
 
 OneSidedTransferRPUDeviceMetaParameter(){};
 OneSidedTransferRPUDeviceMetaParameter(const OneSidedRPUDeviceMetaParameterBase<T> &dp, int n_devices)
@@ -69,7 +78,7 @@ std::string getName() const override {
   OneSidedTransferRPUDeviceMetaParameter<T> *clone() const override {
     return new OneSidedTransferRPUDeviceMetaParameter<T>(*this);
   };
-  DeviceUpdateType implements() const override { return DeviceUpdateType::Transfer; };
+  DeviceUpdateType implements() const override { return DeviceUpdateType::OneSided; };
   void printToStream(std::stringstream &ss) const override;
 
   T calcWeightGranularity() const override {
@@ -112,6 +121,15 @@ public:
     swap(a.current_slice_indices_, b.current_slice_indices_);
     swap(a.fully_hidden_, b.fully_hidden_);
     swap(a.last_weight_, b.last_weight_);
+    
+    swap(a.g_plus_, b.g_plus_);
+    swap(a.g_minus_, b.g_minus_);
+    swap(a.a_indices_, b.a_indices_);
+    swap(a.b_indices_, b.b_indices_);
+    swap(a.refresh_counter_, b.refresh_counter_);
+    swap(a.refresh_fb_pass_, b.refresh_fb_pass_);
+    swap(a.refresh_pwu_, b.refresh_pwu_);
+    swap(a.refresh_vecs_, b.refresh_vecs_);
   }
 
   OneSidedTransferRPUDeviceMetaParameter<T> &getPar() const override {
@@ -128,7 +146,7 @@ public:
   void clipWeights(T **weights, T clip) override;
   void
   resetCols(T **weights, int start_col, int n_cols, T reset_prob, RealWorldRNG<T> &rng) override;
-
+  void invert();
   void setDeviceParameter(T **out_weights, const std::vector<T *> &data_ptrs) override;
   void setHiddenUpdateIdx(int idx) override{};
 
@@ -158,6 +176,13 @@ public:
 
   void doDenseUpdate(T **weights, int *coincidences, RNG<T> *rng) override;
 
+
+  virtual T **getPosWeights(int device_idx) { return this->getWeightVec()[g_plus_[device_idx]]; };
+  virtual T **getNegWeights(int device_idx) { return this->getWeightVec()[g_minus_[device_idx]]; };
+
+  inline uint64_t getRefreshCount() const { return refresh_counter_; };
+
+
 protected:
   void populate(const OneSidedTransferRPUDeviceMetaParameter<T> &par, RealWorldRNG<T> *rng);
   void reduceToWeights(T **weights) const override;
@@ -175,13 +200,21 @@ protected:
   // no need to swap/copy.
   std::vector<T> transfer_tmp_;
 
+
+ std::unique_ptr<ForwardBackwardPassIOManaged<T>> refresh_fb_pass_ = nullptr;
+  std::unique_ptr<PulsedRPUWeightUpdater<T>> refresh_pwu_ = nullptr;
+  std::vector<T> refresh_vecs_;
+
+  inline bool
+  refreshCriterion(T &wp, T &wm, T &w_max, T &w_min, T &upper_thres, T &lower_thres) const;
+
   private:
   bool isInverted() const;
   int refreshWeights();
   void setRefreshVecs();
 
-  int g_plus_ = 1;
-  int g_minus_ = 0;
+  std::vector<int> g_plus_;
+  std::vector<int> g_minus_ ;
   uint64_t refresh_counter_ = 0;
 
   std::vector<int> a_indices_;
