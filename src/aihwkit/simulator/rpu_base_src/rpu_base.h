@@ -26,7 +26,7 @@
 #include "rpu_vector_device.h"
 #include "weight_clipper.h"
 #include "weight_modifier.h"
-
+#include "rpu_onesided_transfer_device.h"
 #ifdef RPU_USE_CUDA
 #include "cuda_util.h"
 #include "rpucuda.h"
