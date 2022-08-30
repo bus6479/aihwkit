@@ -24,12 +24,13 @@ void declare_rpu_devices(py::module &m) {
   using ExpStepParam = RPU::ExpStepRPUDeviceMetaParameter<T>;
   using VectorParam = RPU::VectorRPUDeviceMetaParameter<T>;
   using OneSidedParam = RPU::OneSidedRPUDeviceMetaParameter<T>;
+  using OneSidedTransferParam = PRU::OneSidedTransferRPUDeviceMetaParameter<T>;
   using TransferParam = RPU::TransferRPUDeviceMetaParameter<T>;
   using MixedPrecParam = RPU::MixedPrecRPUDeviceMetaParameter<T>;
   using PowStepParam = RPU::PowStepRPUDeviceMetaParameter<T>;
   using PiecewiseStepParam = RPU::PiecewiseStepRPUDeviceMetaParameter<T>;
   using BufferedTransferParam = RPU::BufferedTransferRPUDeviceMetaParameter<T>;
-
+  
   /*
    * Trampoline classes for allowing inheritance.
    */
@@ -220,7 +221,26 @@ void declare_rpu_devices(py::module &m) {
       PYBIND11_OVERLOAD(T, OneSidedParam, calcWeightGranularity, );
     }
   };
-
+  class PyOneSidedTransferParam : public OneSidedTransferParam {
+  public:
+    std::string getName() const override {
+      PYBIND11_OVERLOAD(std::string, OneSidedTransferParam,getName, );
+    }
+    OneSidedTransferParam *clone() const override {
+      PYBIND11_OVERLOAD(OneSidedTransferParam *, OneSidedTransferParam, clone, );
+    }
+    RPU::DeviceUpdateType implements() const override{
+      PYBIND11_OVERLOAD(RPU::DeviceUpdateType, OneSidedParam, implements, );
+    }
+    RPU::OneSidedTransferRPUDevice<T> *
+    createDevice(int x_size, int d_size, RPU::RealWorldRNG<T> *rng) override {
+      PYBIND11_OVERLOAD(
+          RPU::OneSidedTransferRPUDevice<T> *, OneSidedTransferParam, createDevice, x_size, d_size, rng);
+    }
+    T calcWeightGranularity() const override {
+      PYBIND11_OVERLOAD(T, OneSidedTransferParam, calcWeightGranularity, );
+    }
+  };
   class PyTransferParam : public TransferParam {
   public:
     std::string getName() const override {
@@ -611,7 +631,46 @@ void declare_rpu_devices(py::module &m) {
         Returns:
            float: weight granularity
         )pbdoc");
+  py::class_<OneSidedTransferParam,PyOneSidedTransferParam, VectorParam>(m, "OneSidedTransferResistiveDeviceParameter")
+      .def(py::init<>())
+      .def_readwrite("gamma", &OneSidedTransferParam::gamma)
+      .def_readwrite("transfer_every", &OneSidedTransferParam::transfer_every)
+      .def_readwrite("no_self_transfer", &OneSidedTransferParam::no_self_transfer)
+      .def_readwrite(
+          "transfer_every_vec", &OneSidedTransferParam::transfer_every_vec) // can this be filled?
+      .def_readwrite("units_in_mbatch", &OneSidedTransferParam::units_in_mbatch)
+      .def_readwrite("n_reads_per_transfer", &OneSidedTransferParam::n_reads_per_transfer)
+      .def_readwrite("with_reset_prob", &OneSidedTransferParam::with_reset_prob)
+      .def_readwrite("random_selection", &OneSidedTransferParam::random_selection)
+      .def_readwrite("transfer_columns", &OneSidedTransferParam::transfer_columns)
+      .def_readwrite("transfer_lr", &OneSidedTransferParam::transfer_lr)
+      .def_readwrite("fast_lr", &OneSidedTransferParam::fast_lr)
+      .def_readwrite("transfer_lr_vec", &OneSidedTransferParam::transfer_lr_vec)
+      .def_readwrite("scale_transfer_lr", &OneSidedTransferParam::scale_transfer_lr)
+      .def_readwrite("transfer_forward", &OneSidedTransferParam::transfer_io)
+      .def_readwrite("transfer_update", &OneSidedTransferParam::transfer_up)
+      .def_readwrite("refresh_every", &OneSidedParam::refresh_every)
+      .def_readwrite("refresh_forward", &OneSidedTransferParam::refresh_io)
+      .def_readwrite("refresh_update", &OneSidedTransferParam::refresh_up)
+      .def_readwrite("refresh_upper_thres", &OneSidedTransferParam::refresh_upper_thres)
+      .def_readwrite("refresh_lower_thres", &OneSidedTransferParam::refresh_lower_thres)
+      .def_readwrite("units_in_mbatch", &OneSidedTransferParam::units_in_mbatch)
+      .def_readwrite("copy_inverted", &OneSidedTransferParam::copy_inverted)
+      .def(
+          "__str__",
+          [](OneSidedTransferParam &self) {
+            std::stringstream ss;
+            self.printToStream(ss);
+            return ss.str();
+          })
+      .def(
+          "calc_weight_granularity", &OneSidedTransferParam::calcWeightGranularity,
+          R"pbdoc(
+        Calculates the granularity of the weights (typically ``dw_min``)
 
+        Returns:
+           float: weight granularity
+        )pbdoc");
   py::class_<TransferParam, PyTransferParam, VectorParam>(m, "TransferResistiveDeviceParameter")
       .def(py::init<>())
       .def_readwrite("gamma", &TransferParam::gamma)
