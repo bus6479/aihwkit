@@ -622,13 +622,19 @@ void OneSidedTransferRPUDevice<T>::writeVector(
 
   T **W_plus = getDeviceWeights(g_plus_[device_idx]);
   T **W_minus = getDeviceWeights(g_minus_[device_idx]);
-  T **W=nullptr; //TO DO // HAVE TO CHECK
   if (getPar().transfer_columns) {
     // in_vec is x_input
+  T **W=Array_2D_Get<T>(x_size_,d_size_) 
+ for(int i=0;i<this->x_size_;i++){
+  for(int j=0;j<this->d_size_;j++)
+  {
+   W[i][j]=(T)0.0;
+  }
+ }
     transfer_pwu_->updateVectorWithDevice(
         W, in_vec, 1, out_vec, 1, lr, m_batch_info, &*this->rpu_device_vec_[device_idx]);
-         for(int i=0;i<this->x_size;i++){
-  for(int j=0;j<this->d_size;j++)
+         for(int i=0;i<this->x_size_;i++){
+  for(int j=0;j<this->d_size_;j++)
 {
 if(W[i][j]>0)
 {
@@ -642,7 +648,14 @@ W_minus[i][j]-=W[i][j];
   }
   } else {
     // in_vec is d_input
-    transfer_pwu_->updateVectorWithDevice(
+   T **W=Array_2D_Get<T>(d_size_,x_size_) 
+ for(int i=0;i<this->x_size_;i++){
+  for(int j=0;j<this->d_size_;j++)
+  {
+   W[j][i]=(T)0.0;
+  }
+ }
+   transfer_pwu_->updateVectorWithDevice(
         W, out_vec, 1, in_vec, 1, lr, m_batch_info, &*this->rpu_device_vec_[device_idx]);
          for(int i=0;i<this->x_size;i++){
   for(int j=0;j<this->d_size;j++)
@@ -741,12 +754,182 @@ void OneSidedTransferRPUDevice<T>::transfer(int to_device_idx, int from_device_i
   current_slice_indices_[from_device_idx] = (i_slice + n_transfer) % in_size;
 }
 
+/* refresh weights  */
+//Only 1st device set is refreshed
+template <typename T>
+inline bool OneSidedTransferRPUDevice<T>::refreshCriterion(
+    T &wp, T &wm, T &w_max, T &w_min, T &upper_thres, T &lower_thres) const {
+  return (wp > wm) ? (wp / w_max > upper_thres && wm / w_min > lower_thres)
+                   : (wp / w_max > lower_thres && wm / w_min > upper_thres);
+}
+
+template <typename T> int OneSidedTransferRPUDevice<T>::refreshWeights() {
+
+  const auto &par = getPar();
+
+  if (refresh_p_tmp_.size() < (size_t)this->d_size_) {
+    refresh_p_tmp_.resize(this->d_size_);
+    refresh_m_tmp_.resize(this->d_size_);
+    refresh_p_vec_.resize(this->d_size_);
+    refresh_m_vec_.resize(this->d_size_);
+  }
+
+  T w_max =
+      fabs(static_cast<PulsedRPUDeviceMetaParameter<T> &>(this->rpu_device_vec_[g_plus_[0]]->getPar())
+               .w_max);
+  T w_min =
+      fabs(static_cast<PulsedRPUDeviceMetaParameter<T> &>(this->rpu_device_vec_[g_minus_[0]]->getPar())
+               .w_max); // also max because of the one-sided-ness
+  T upper_thres = par.refresh_upper_thres;
+  T lower_thres = par.refresh_lower_thres;
+  T **weights_p = this->weights_vec_[g_plus_[0]];
+  T **weights_m = this->weights_vec_[g_minus_[0]];
+
+  std::vector<int> refresh_indices;
+
+  int refresh_counter = 0;
+
+  for (int j_col = 0; j_col < this->x_size_; j_col++) {
+
+    T *x = &refresh_vecs_[j_col * this->x_size_];
+    // read out with forward pass
+    refresh_fb_pass_->forwardVector(weights_p, x, 1, refresh_p_tmp_.data(), 1, (T)1.0, false);
+    refresh_fb_pass_->forwardVector(weights_m, x, 1, refresh_m_tmp_.data(), 1, (T)1.0, false);
+
+    int refresh_p_counter = 0;
+    int refresh_m_counter = 0;
+
+    refresh_indices.resize(0);
+    for (int i = 0; i < this->d_size_; i++) {
+      T wp = refresh_p_tmp_[i];
+      T wm = refresh_m_tmp_[i];
+      refresh_p_vec_[i] = 0.0;
+      refresh_m_vec_[i] = 0.0;
+      if (refreshCriterion(wp, wm, w_max, w_min, upper_thres, lower_thres)) {
+        if (wp > wm) {
+          refresh_p_vec_[i] = wp - wm;
+          refresh_p_counter++;
+        } else {
+          refresh_m_vec_[i] = wm - wp;
+          refresh_m_counter++;
+        }
+        refresh_indices.push_back(i * this->x_size_ + j_col);
+      }
+    }
+    // reset (note: it is made sure during init that we have a PulsedRPUDevice)
+    static_cast<PulsedRPUDevice<T> *>(&*this->rpu_device_vec_[g_plus_[0]])
+        ->resetAtIndices(weights_p, refresh_indices, this->rw_rng_);
+    static_cast<PulsedRPUDevice<T> *>(&*this->rpu_device_vec_[g_minus_[0]])
+        ->resetAtIndices(weights_m, refresh_indices, this->rw_rng_);
+
+    // do the refresh write
+    // writing might be quite big. Probably need closed loop? Or can let training do the rest
+
+    // CAUTION: this refresh does also increase the update
+    // counter... Note that we use 1 as m_batch info since not
+    // every time the update is called.
+
+    if (refresh_p_counter > 0) {
+      refresh_pwu_->updateVectorWithDevice(
+          weights_p, x, 1, refresh_p_vec_.data(), 1,
+          -1.0, // LR
+          1, &*this->rpu_device_vec_[g_plus_[0]]);
+    }
+    if (refresh_m_counter > 0) {
+      refresh_pwu_->updateVectorWithDevice(
+          weights_m, x, 1, refresh_m_vec_.data(), 1,
+          -1.0, // LR
+          1, &*this->rpu_device_vec_[g_minus_[0]]);
+    }
+
+    refresh_counter += refresh_p_counter + refresh_m_counter;
+  }
+
+  return refresh_counter;
+}
+
+/********************************************************************************/
+/* compute functions  */
+
+template <typename T>
+void OneSidedTransferRPUDevice<T>::resetCols(
+    T **weights, int start_col, int n_cols, T reset_prob, RealWorldRNG<T> &rng) {
+  // CAUTION: reset_prob<1 means that it potentially resets only g_plus or g_minus !!!
+  VectorRPUDevice<T>::resetCols(weights, start_col, n_cols, reset_prob, rng);
+}
+
+template <typename T> bool OneSidedTransferRPUDevice<T>::onSetWeights(T **weights) {
+
+  resetCounters(true);
+
+  T *w = weights[0];
+
+  PRAGMA_SIMD
+  for (int i = 0; i < this->size_; i++) {
+    this->weights_vec_[g_plus_][0][i] = w[i] > 0 ? w[i] : (T)0.0;
+    this->weights_vec_[g_minus_][0][i] = w[i] < 0 ? -w[i] : (T)0.0;
+  }
+
+  this->rpu_device_vec_[g_plus_]->onSetWeights(this->weights_vec_[g_plus_]);
+  this->rpu_device_vec_[g_minus_]->onSetWeights(this->weights_vec_[g_minus_]);
+
+  this->reduceToWeights(weights);
+
+  return true; // modified device thus true
+}
 
 
+#define COMMA ,
+#define LOOP_WITH_HIDDEN(FUN, ADD_ARGS)                                                            \
+  if (!fully_hidden_) {                                                                            \
+    VectorRPUDevice<T>::FUN(weights ADD_ARGS);                                                     \
+  } else {                                                                                         \
+    for (size_t k = 0; k < this->rpu_device_vec_.size() - 1; k++) {                                \
+      this->rpu_device_vec_[k]->FUN(this->weights_vec_[k] ADD_ARGS);                               \
+    }                                                                                              \
+    this->rpu_device_vec_.back()->FUN(weights ADD_ARGS);                                           \
+  }
 
+template <typename T> void OneSidedTransferRPUDevice<T>::decayWeights(T **weights, bool bias_no_decay) {
+  LOOP_WITH_HIDDEN(decayWeights, COMMA bias_no_decay);
+}
 
+template <typename T>
+void OneSidedTransferRPUDevice<T>::decayWeights(T **weights, T alpha, bool bias_no_decay) {
+  LOOP_WITH_HIDDEN(decayWeights, COMMA alpha COMMA bias_no_decay);
+}
 
+template <typename T> void OneSidedTransferRPUDevice<T>::diffuseWeights(T **weights, RNG<T> &rng) {
+  LOOP_WITH_HIDDEN(diffuseWeights, COMMA rng);
+}
 
+template <typename T> void OneSidedTransferRPUDevice<T>::clipWeights(T **weights, T clip) {
+  LOOP_WITH_HIDDEN(clipWeights, COMMA clip);
+}
 
+template <typename T>
+void OneSidedTransferRPUDevice<T>::driftWeights(T **weights, T time_since_last_call, RNG<T> &rng) {
+  LOOP_WITH_HIDDEN(driftWeights, COMMA time_since_last_call COMMA rng);
+}
+
+template <typename T>
+void OneSidedTransferRPUDevice<T>::resetCols(
+    T **weights, int start_col, int n_cols, T reset_prob, RealWorldRNG<T> &rng) {
+  LOOP_WITH_HIDDEN(resetCols, COMMA start_col COMMA n_cols COMMA reset_prob COMMA rng);
+}
+
+#undef COMMA
+#undef LOOP_WITH_HIDDEN
+
+template <typename T>
+void OneSidedTransferRPUDevice<T>::setDeviceParameter(T **out_weights, const std::vector<T *> &data_ptrs) {
+  VectorRPUDevice<T>::setDeviceParameter(out_weights, data_ptrs);
+
+  if (fully_hidden_) {
+    // weight might have changed because of hidden weight change
+    RPU::math::copy<T>(
+        this->size_, this->weights_vec_[this->n_devices_ - 1][0], 1, out_weights[0], 1);
+  }
+}
 
 }
