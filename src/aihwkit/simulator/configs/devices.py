@@ -1208,6 +1208,118 @@ class DifferenceUnitCell(OneSidedUnitCell):
              'OneSidedUnitCell instead.',
              DeprecationWarning)
 
+@dataclass
+class OneSidedTransferCompound(UnitCell):
+    r"""Abstract device model that takes 2 or more OneSidedUnitCell and
+    implements a transfer-based learning rule.
+    
+    """
+    bindings_class: ClassVar[Type] = devices.OneSidedTransferResistiveDeviceParameter
+
+    gamma: float = 0.0
+
+    gamma_vec: List[float] = field(default_factory=list,
+                                   metadata={'hide_if': []})
+
+    transfer_every: float = 1.0
+
+    no_self_transfer: bool = True
+    """Whether to set the transfer rate of the last device (which is applied to
+    itself) to zero."""
+
+    transfer_every_vec: List[float] = field(default_factory=list,
+                                            metadata={'hide_if': []})
+
+    units_in_mbatch: bool = True
+
+    n_reads_per_transfer: int = 1
+
+    transfer_columns: bool = True
+
+    with_reset_prob: float = 0.0
+
+    random_selection: bool = False
+
+    fast_lr: float = 0.0
+
+    transfer_lr: float = 1.0
+
+    transfer_lr_vec: List[float] = field(default_factory=list,
+                                         metadata={'hide_if': []})
+
+    scale_transfer_lr: bool = True
+
+    refresh_every: int = 0
+
+
+    units_in_mbatch: bool = True
+
+    refresh_upper_thres: float = 0.75
+    
+    refresh_lower_thres: float = 0.25
+
+
+    refresh_forward: IOParameters = field(
+        default_factory=IOParameters)
+    """Input-output parameters that define the read during a refresh event.
+
+    :class:`~aihwkit.simulator.config.utils.AnalogTileInputOutputParameters`
+    that define the read (forward) of an refresh event. For instance
+    the amount of noise or whether refresh is done using a ADC/DAC
+    etc.
+    """
+
+    refresh_update: UpdateParameters = field(default_factory=UpdateParameters)
+    """Update parameters that define the type of update used for each refresh
+    event.
+
+    Update parameters
+    :class:`~aihwkit.simulator.config.utils.AnalogTileUpdateParameters`
+    that define the type of update used for each refresh event.
+    """
+
+    copy_inverted: bool = False
+
+    transfer_forward: IOParameters = field(
+        default_factory=IOParameters)
+    """Input-output parameters that define the read of a transfer event.
+
+    :class:`~aihwkit.simulator.config.utils.AnalogTileInputOutputParameters` that define the read
+    (forward or backward) of an transfer event. For instance the amount of noise
+    or whether transfer is done using a ADC/DAC etc.
+    """
+
+    transfer_update: UpdateParameters = field(
+        default_factory=UpdateParameters)
+    """Update parameters that define the type of update used for each transfer
+    event.
+
+    Update parameters :class:`~aihwkit.simulator.config.utils.AnalogTileUpdateParameters` that
+    define the type of update used for each transfer event.
+    """
+
+    def as_bindings(self) -> devices.OneSidedTransferResistiveDeviceParameter:
+        """Return a representation of this instance as a simulator bindings object."""
+        if not isinstance(self.unit_cell_devices, list):
+            raise ConfigError('unit_cell_devices should be a list of devices')
+
+        n_devices = len(self.unit_cell_devices)
+
+        transfer_parameters = parameters_to_bindings(self)
+
+        param_fast = self.unit_cell_devices[0].as_bindings()
+        param_slow = self.unit_cell_devices[1].as_bindings()
+
+        if not transfer_parameters.append_parameter(param_fast):
+            raise ConfigError('Could not add unit cell device parameter')
+
+        for _ in range(n_devices - 1):
+            if not transfer_parameters.append_parameter(param_slow):
+                raise ConfigError('Could not add unit cell device parameter')
+
+        return transfer_parameters
+
+
 
 @dataclass
 class TransferCompound(UnitCell):
