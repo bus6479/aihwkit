@@ -657,8 +657,8 @@ W_minus[i][j]-=W[i][j];
  }
    transfer_pwu_->updateVectorWithDevice(
         W, out_vec, 1, in_vec, 1, lr, m_batch_info, &*this->rpu_device_vec_[device_idx]);
-         for(int i=0;i<this->x_size;i++){
-  for(int j=0;j<this->d_size;j++)
+         for(int i=0;i<this->x_size_;i++){
+  for(int j=0;j<this->d_size_;j++)
 {
 if(W[j][i]>0)
 {
