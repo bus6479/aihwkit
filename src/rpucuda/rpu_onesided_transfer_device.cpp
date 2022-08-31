@@ -45,7 +45,7 @@ OneSidedTransferRPUDeviceMetaParameter<T>::OneSidedTransferRPUDeviceMetaParamete
 
 // TO DO : modify print both ones
 template <typename T>
-void OnesidedTransferRPUDeviceMetaParameter<T>::printToStream(std::stringstream &ss) const {
+void OneSidedTransferRPUDeviceMetaParameter<T>::printToStream(std::stringstream &ss) const {
   ss << this->getName() << std::endl;
   // gamma
   ss << "\tgamma:\t\t\t";
@@ -232,7 +232,7 @@ void OneSidedTransferRPUDeviceMetaParameter<T>::initializeWithSize(int x_size, i
 }
 
 template <typename T>
-T OnesidedTransferRPUDeviceMetaParameter<T>::getTransferLR(
+T OneSidedTransferRPUDeviceMetaParameter<T>::getTransferLR(
     int to_device_idx, int from_device_idx, T current_lr) const {
 
   T lr = transfer_lr_vec[from_device_idx];
@@ -449,7 +449,7 @@ void OneSidedTransferRPUDevice<T>::populate(
 
 template <typename T> bool OneSidedTransferRPUDevice<T>::isInverted() const { return g_plus_[0] == 0; }
 
-template <typename T> inline void OneSidedRPUDevice<T>::invert() { //OT TO DO: invert nth device by add parameter 
+template <typename T> inline void OneSidedTransferRPUDevice<T>::invert() { //OT TO DO: invert nth device by add parameter 
   std::swap(g_plus_[0], g_minus_[0]);
   this->reduce_weightening_[g_plus_[0]] = 1;
   this->reduce_weightening_[g_minus_[0]] = -1;
@@ -558,7 +558,7 @@ void OneSidedTransferRPUDevice<T>::doSparseUpdate(
 
 
 template <typename T>
-void OneSidedRPUDevice<T>::doDenseUpdate(T **weights, int *coincidences, RNG<T> *rng) {
+void OneSidedTransferRPUDevice<T>::doDenseUpdate(T **weights, int *coincidences, RNG<T> *rng) {
 
   coincidences_p_.resize(this->size_);
   coincidences_m_.resize(this->size_);
