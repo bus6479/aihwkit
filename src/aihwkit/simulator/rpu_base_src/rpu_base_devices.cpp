@@ -24,7 +24,7 @@ void declare_rpu_devices(py::module &m) {
   using ExpStepParam = RPU::ExpStepRPUDeviceMetaParameter<T>;
   using VectorParam = RPU::VectorRPUDeviceMetaParameter<T>;
   using OneSidedParam = RPU::OneSidedRPUDeviceMetaParameter<T>;
-  using OneSidedTransferParam = PRU::OneSidedTransferRPUDeviceMetaParameter<T>;
+  using OneSidedTransferParam = RPU::OneSidedTransferRPUDeviceMetaParameter<T>;
   using TransferParam = RPU::TransferRPUDeviceMetaParameter<T>;
   using MixedPrecParam = RPU::MixedPrecRPUDeviceMetaParameter<T>;
   using PowStepParam = RPU::PowStepRPUDeviceMetaParameter<T>;
