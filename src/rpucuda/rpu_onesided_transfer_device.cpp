@@ -455,7 +455,15 @@ template <typename T> inline void OneSidedTransferRPUDevice<T>::invert() { //OT 
   this->reduce_weightening_[g_minus_[0]] = -1;
 }
 
+template <typename T> T OneSidedTransferRPUDevice<T>::getPulseCountLearningRate(T learning_rate) {
+  const auto &par = getPar();
 
+  if (par.fast_lr > 0) {
+    return par.fast_lr;
+  } else {
+    return learning_rate;
+  }
+}
 
 template <typename T>
 void OneSidedTransferRPUDevice<T>::initUpdateCycle(
