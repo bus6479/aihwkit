@@ -624,7 +624,7 @@ void OneSidedTransferRPUDevice<T>::writeVector(
   T **W_minus = getDeviceWeights(g_minus_[device_idx]);
   if (getPar().transfer_columns) {
     // in_vec is x_input
-  T **W=Array_2D_Get<T>(x_size_,d_size_) 
+  T **W=Array_2D_Get<T>(this->x_size_,this->d_size_) 
  for(int i=0;i<this->x_size_;i++){
   for(int j=0;j<this->d_size_;j++)
   {
@@ -648,7 +648,7 @@ W_minus[i][j]-=W[i][j];
   }
   } else {
     // in_vec is d_input
-   T **W=Array_2D_Get<T>(d_size_,x_size_) 
+   T **W=Array_2D_Get<T>(this->d_size_,this->x_size_) 
  for(int i=0;i<this->x_size_;i++){
   for(int j=0;j<this->d_size_;j++)
   {
