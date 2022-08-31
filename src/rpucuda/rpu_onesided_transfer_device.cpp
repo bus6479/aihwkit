@@ -356,7 +356,7 @@ template <typename T> void OneSidedTransferRPUDevice<T>::setRefreshVecs() {
 //Transfer Functions
 
 
-template <typename T> void TransferRPUDevice<T>::setTransferVecs(const T *transfer_vecs) {
+template <typename T> void OneSidedTransferRPUDevice<T>::setTransferVecs(const T *transfer_vecs) {
   T in_size = getPar().getInSize();
 
   transfer_vecs_.resize(in_size * in_size); //!!  square matrix
@@ -434,13 +434,13 @@ void OneSidedTransferRPUDevice<T>::populate(
 
 
  this->setRefreshVecs();
-  auto shared_rng = std::make_shared<RNG<T>>(0); // we just take a new one here (seeds...)
+  auto shared_rng2 = std::make_shared<RNG<T>>(0); // we just take a new one here (seeds...)
   refresh_fb_pass_ =
-      RPU::make_unique<ForwardBackwardPassIOManaged<T>>(this->x_size_, this->d_size_, shared_rng);
+      RPU::make_unique<ForwardBackwardPassIOManaged<T>>(this->x_size_, this->d_size_, shared_rng2);
   refresh_fb_pass_->setIOPar(par.refresh_io, par.refresh_io);
 
   refresh_pwu_ =
-      RPU::make_unique<PulsedRPUWeightUpdater<T>>(this->x_size_, this->d_size_, shared_rng);
+      RPU::make_unique<PulsedRPUWeightUpdater<T>>(this->x_size_, this->d_size_, shared_rng2);
   refresh_pwu_->setUpPar(par.refresh_up);
 
 
@@ -498,7 +498,7 @@ void OneSidedTransferRPUDevice<T>::finishUpdateCycle(
   last_weight_ = fully_hidden_ ? weights : nullptr;
 
   // we transfer the device here to cope with the sparse update below.
-  for (int j = 0; j < this->n_devices/2_; j++) {
+  for (int j = 0; j < this->n_devices_/2; j++) {
     int every = getTransferEvery(j, m_batch_info);
     if (every > 0 && this->current_update_idx_ % every == 0) {
       // last is self-update (does nothing per default, but could implement refresh in child)
@@ -612,7 +612,7 @@ void OneSidedTransferRPUDevice<T>::readVector(int device_idx, const T *in_vec, T
     transfer_fb_pass_->forwardVector(W_minus, in_vec,1,out_vec,1,-alpha,false);
   } else {
     transfer_fb_pass_->backwardVector(W_plus, in_vec, 1, out_vec, 1, alpha);
-    trabsfer_fb_pass_->backwardVector(W_minus,in_vec,1,out_vec,1,-alpha);
+    transfer_fb_pass_->backwardVector(W_minus,in_vec,1,out_vec,1,-alpha);
   }
 }
 
@@ -624,7 +624,7 @@ void OneSidedTransferRPUDevice<T>::writeVector(
   T **W_minus = getDeviceWeights(g_minus_[device_idx]);
   if (getPar().transfer_columns) {
     // in_vec is x_input
-  T **W=Array_2D_Get<T>(this->x_size_,this->d_size_) 
+  T **W=Array_2D_Get<T>(this->x_size_,this->d_size_) ;
  for(int i=0;i<this->x_size_;i++){
   for(int j=0;j<this->d_size_;j++)
   {
@@ -648,7 +648,7 @@ W_minus[i][j]-=W[i][j];
   }
   } else {
     // in_vec is d_input
-   T **W=Array_2D_Get<T>(this->d_size_,this->x_size_) 
+   T **W=Array_2D_Get<T>(this->d_size_,this->x_size_) ;
  for(int i=0;i<this->x_size_;i++){
   for(int j=0;j<this->d_size_;j++)
   {
@@ -851,12 +851,7 @@ template <typename T> int OneSidedTransferRPUDevice<T>::refreshWeights() {
 /********************************************************************************/
 /* compute functions  */
 
-template <typename T>
-void OneSidedTransferRPUDevice<T>::resetCols(
-    T **weights, int start_col, int n_cols, T reset_prob, RealWorldRNG<T> &rng) {
-  // CAUTION: reset_prob<1 means that it potentially resets only g_plus or g_minus !!!
-  VectorRPUDevice<T>::resetCols(weights, start_col, n_cols, reset_prob, rng);
-}
+
 
 template <typename T> bool OneSidedTransferRPUDevice<T>::onSetWeights(T **weights) {
 
@@ -866,12 +861,12 @@ template <typename T> bool OneSidedTransferRPUDevice<T>::onSetWeights(T **weight
 
   PRAGMA_SIMD
   for (int i = 0; i < this->size_; i++) {
-    this->weights_vec_[g_plus_][0][i] = w[i] > 0 ? w[i] : (T)0.0;
-    this->weights_vec_[g_minus_][0][i] = w[i] < 0 ? -w[i] : (T)0.0;
+    this->weights_vec_[g_plus_[0]][0][i] = w[i] > 0 ? w[i] : (T)0.0;
+    this->weights_vec_[g_minus_[0]][0][i] = w[i] < 0 ? -w[i] : (T)0.0;
   }
 
-  this->rpu_device_vec_[g_plus_]->onSetWeights(this->weights_vec_[g_plus_]);
-  this->rpu_device_vec_[g_minus_]->onSetWeights(this->weights_vec_[g_minus_]);
+  this->rpu_device_vec_[g_plus_[0]]->onSetWeights(this->weights_vec_[g_plus_[0]]);
+  this->rpu_device_vec_[g_minus_[0]]->onSetWeights(this->weights_vec_[g_minus_[0]]);
 
   this->reduceToWeights(weights);
 
