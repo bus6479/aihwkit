@@ -12,12 +12,12 @@ namespace RPU {
 
 template <typename T> class OneSidedTransferRPUDevice;
 
-template <typename T> struct OneSidedTransferRPUDeviceParameter : VectorRPUDeviceMetaParameter<T> {
+template <typename T> struct OneSidedTransferRPUDeviceMetaParameter : VectorRPUDeviceMetaParameter<T> {
 
 T gamma= (T)0.0;
 
 T transfer_every = (T)1.0;
-bool units_in_mbatch = false;
+bool units_in_mbatch = false;//have to check
 int n_reads_per_transfer = 1;
 T with_reset_prob = (T)0.0;
 bool no_self_transfer = true;
@@ -32,12 +32,12 @@ int _out_size = 0;
 
 std::vector<T> transfer_every_vec; // IBM TODO
 
-IOMetaParamter<T> transfer_io;
+IOMetaParameter<T> transfer_io;
 PulsedUpdateMetaParameter<T> transfer_up;
 
 
+
 int refresh_every = 0; // refresh every x updates (ie counting single vector updates)
-bool units_in_mbatch = true;
 IOMetaParameter<T> refresh_io;           // the IO for reading out during refresh
 PulsedUpdateMetaParameter<T> refresh_up; // UP parameters for refresh
 T refresh_upper_thres = 0.75;
@@ -45,12 +45,12 @@ T refresh_lower_thres = 0.25;
 bool copy_inverted = false; // whether to use copy inverted for second device
 
 OneSidedTransferRPUDeviceMetaParameter(){};
-OneSidedTransferRPUDeviceMetaParameter(const OneSidedRPUDeviceMetaParameterBase<T> &dp, int n_devices)
+OneSidedTransferRPUDeviceMetaParameter(const PulsedRPUDeviceMetaParameterBase<T> &dp, int n_devices)
     : VectorRPUDeviceMetaParameter<T>(dp, n_devices){};
 
 OneSidedTransferRPUDeviceMetaParameter(
-    const OneSidedRPUDeviceMetaParameterBase<T> &dp_fast,
-    const OneSidedRPUDeviceMetaParameterBase<T> &dp_rest,
+    const PulsedRPUDeviceMetaParameterBase<T> &dp_fast,
+    const PulsedRPUDeviceMetaParameterBase<T> &dp_rest,
     int n_total_devices);
 
 virtual void initializeWithSize(int x_size, int d_size);
@@ -110,7 +110,7 @@ public:
   OneSidedTransferRPUDevice(OneSidedTransferRPUDevice<T> &&);
   OneSidedTransferRPUDevice<T> &operator=(OneSidedTransferRPUDevice<T> &&);
 
-  friend void swap(OneSidedTransferRPUDevice<T> &a, OneSided0TransferRPUDevice<T> &b) noexcept {
+  friend void swap(OneSidedTransferRPUDevice<T> &a, OneSidedTransferRPUDevice<T> &b) noexcept {
     using std::swap;
     swap(static_cast<VectorRPUDevice<T> &>(a), static_cast<VectorRPUDevice<T> &>(b));
 
