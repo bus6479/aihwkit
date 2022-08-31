@@ -230,7 +230,7 @@ void declare_rpu_devices(py::module &m) {
       PYBIND11_OVERLOAD(OneSidedTransferParam *, OneSidedTransferParam, clone, );
     }
     RPU::DeviceUpdateType implements() const override{
-      PYBIND11_OVERLOAD(RPU::DeviceUpdateType, OneSidedParam, implements, );
+      PYBIND11_OVERLOAD(RPU::DeviceUpdateType, OneSidedTransferParam, implements, );
     }
     RPU::OneSidedTransferRPUDevice<T> *
     createDevice(int x_size, int d_size, RPU::RealWorldRNG<T> *rng) override {
@@ -649,7 +649,7 @@ void declare_rpu_devices(py::module &m) {
       .def_readwrite("scale_transfer_lr", &OneSidedTransferParam::scale_transfer_lr)
       .def_readwrite("transfer_forward", &OneSidedTransferParam::transfer_io)
       .def_readwrite("transfer_update", &OneSidedTransferParam::transfer_up)
-      .def_readwrite("refresh_every", &OneSidedParam::refresh_every)
+      .def_readwrite("refresh_every", &OneSidedTransferParam::refresh_every)
       .def_readwrite("refresh_forward", &OneSidedTransferParam::refresh_io)
       .def_readwrite("refresh_update", &OneSidedTransferParam::refresh_up)
       .def_readwrite("refresh_upper_thres", &OneSidedTransferParam::refresh_upper_thres)
