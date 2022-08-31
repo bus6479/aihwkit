@@ -149,7 +149,8 @@ public:
   void invert();
   void setDeviceParameter(T **out_weights, const std::vector<T *> &data_ptrs) override;
   void setHiddenUpdateIdx(int idx) override{};
-
+  void initUpdateCycle(
+      T **weights, const PulsedUpdateMetaParameter<T> &up, T current_lr, int m_batch_info) override;
   void finishUpdateCycle(
       T **weights, const PulsedUpdateMetaParameter<T> &up, T current_lr, int m_batch_info) override;
   T getPulseCountLearningRate(T learning_rate) override;
