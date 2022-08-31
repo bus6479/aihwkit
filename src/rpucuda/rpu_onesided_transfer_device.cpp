@@ -590,7 +590,7 @@ void OneSidedTransferRPUDevice<T>::doDenseUpdate(T **weights, int *coincidences,
 
 
 //Transfer
-template <typename T> void TransferRPUDevice<T>::reduceToWeights(T **weights) const {
+template <typename T> void OneSidedTransferRPUDevice<T>::reduceToWeights(T **weights) const {
   // note that we do not reduce if fully hidden since the last
   // weight is then equivalent to the actual given weight.
   if (!fully_hidden_) {
