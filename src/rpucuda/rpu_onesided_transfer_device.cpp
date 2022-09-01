@@ -198,6 +198,7 @@ void OneSidedTransferRPUDeviceMetaParameter<T>::initializeWithSize(int x_size, i
     T n = transfer_every;
     for (size_t i = 0; i < n_devices; i=i+2) { // OT : 2 devices are one set.
       transfer_every_vec.push_back(n);
+      transfer_every_vec.push_back(n);
       n *= (T)_in_size / n_reads_per_transfer;
     }
     if (no_self_transfer) {
