@@ -210,9 +210,9 @@ void OneSidedRPUDevice<T>::initUpdateCycle(
 
   VectorRPUDevice<T>::initUpdateCycle(weights, up, current_lr, m_batch_info);
 
-  if (a_indices_.size() < (size_t)up.desired_BL) {
-    a_indices_.resize(up.desired_BL);
-    b_indices_.resize(up.desired_BL);
+  if (a_indices_.size() < (size_t)this->x_size_) {
+    a_indices_.resize(this->x_size_);
+    b_indices_.resize(this->x_size_);
   }
 }
 
